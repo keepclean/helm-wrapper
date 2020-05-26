@@ -3,14 +3,20 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
@@ -61,10 +67,11 @@ func main() {
 	cmd := exec.Command(fmt.Sprintf("%s/helm-%v", binDir, server), os.Args[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Fprint(os.Stdout, string(out), err)
+		os.Exit(1)
 	}
 
-	fmt.Println(string(out))
+	fmt.Fprint(os.Stdout, string(out))
 }
 
 func dirs(path string) error {
@@ -178,10 +185,52 @@ func unTarZip(v, dir string) error {
 }
 
 func serverVersion(v, dir string) (string, error) {
-	out, err := exec.Command(fmt.Sprintf("%s/helm-%v", dir, v), "version", "--server", "--template", "{{.Server.SemVer}}").Output()
+	ok, err := checkTiller()
+	if err != nil {
+		return "", err
+	}
+
+	if !ok {
+		return v, nil
+	}
+
+	out, err := exec.Command(fmt.Sprintf("%s/helm-%v", dir, v), "version", "--server", "--template", "{{.Server.SemVer}}").CombinedOutput()
 	if err != nil {
 		return "", err
 	}
 
 	return string(out), nil
+}
+
+func checkTiller() (bool, error) {
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+
+	kubeconfig := filepath.Join(homedir, ".kube", "config")
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return false, err
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return false, err
+	}
+
+	listOptions := metav1.ListOptions{
+		LabelSelector: "app=helm,name=tiller",
+	}
+
+	pods, err := clientset.CoreV1().Pods("kube-system").List(context.TODO(), listOptions)
+	if err != nil {
+		return false, err
+	}
+
+	if len(pods.Items) == 0 {
+		return false, nil
+	}
+
+	return true, nil
 }
