@@ -58,7 +58,8 @@ func main() {
 		}
 	}
 
-	out, err := exec.Command(fmt.Sprintf("%s/helm-%v", binDir, server), os.Args[1:]...).Output()
+	cmd := exec.Command(fmt.Sprintf("%s/helm-%v", binDir, server), os.Args[1:]...)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatalln(err)
 	}
