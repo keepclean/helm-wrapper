@@ -27,7 +27,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	v := "v2.16.7"
+	v := "v2.16.8"
 	ok, err := checkLocal(v, binDir)
 	if err != nil {
 		log.Fatalln(err)
